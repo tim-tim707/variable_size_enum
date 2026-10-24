@@ -11,6 +11,15 @@ pub enum Shape {
     Dot,
 }
 
+#[variable_enum(struct_with_kind, struct_with_prefix = "prefix")]
+#[derive(Debug)]
+pub enum ShapeWithPrefix {
+    Circle { r: f64 },
+    Rect { w: f64, h: f64 },
+    Tri { a: f64, b: f64, c: f64 },
+    Dot,
+}
+
 fn main() {
     let d = ShapeKind::Circle;
 

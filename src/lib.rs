@@ -15,14 +15,14 @@ struct VariableEnumArgs {
     kind: bool,
     generate_struct: bool,
     struct_with_kind: bool,
-    prefix: Option<String>,
+    module_prefix: Option<syn::Path>,
 }
 
 impl Parse for VariableEnumArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut kind = false;
         let mut struct_with_kind = false;
-        let mut prefix = None;
+        let mut module_prefix = None;
 
         // This is to generate an error on empty macro call, and have an explicit user choice of plain_struct
         // The user could only select kind, and in this case no struct would be generated alongside it
@@ -36,7 +36,7 @@ impl Parse for VariableEnumArgs {
                 "struct_with_prefix" => {
                     input.parse::<Token![=]>()?;
                     let value: LitStr = input.parse()?;
-                    prefix = Some(value.value());
+                    module_prefix = Some(syn::parse_str::<syn::Path>(&value.value())?);
                 }
                 "plain_struct" => plain_struct = true,
                 other => {
@@ -54,7 +54,7 @@ impl Parse for VariableEnumArgs {
             }
         }
 
-        if !(kind | struct_with_kind | plain_struct) && prefix.is_none() {
+        if !(kind | struct_with_kind | plain_struct) && module_prefix.is_none() {
             return Err(syn::Error::new(
                 input.span(),
                 "No flag set: expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
@@ -81,14 +81,14 @@ impl Parse for VariableEnumArgs {
             generate_struct = true;
         }
 
-        if plain_struct && prefix.is_some() {
+        if plain_struct && module_prefix.is_some() {
             return Err(syn::Error::new(
                 input.span(),
                 "struct_with_prefix flag forces the generation of struct. Remove the 'plain_struct' flag",
             ));
         }
 
-        if prefix.is_some() {
+        if module_prefix.is_some() {
             generate_struct = true;
         }
 
@@ -96,7 +96,7 @@ impl Parse for VariableEnumArgs {
             kind,
             generate_struct,
             struct_with_kind,
-            prefix,
+            module_prefix,
         })
     }
 }
@@ -132,6 +132,38 @@ fn generate_kind_enum(
         #visibility enum #kind_name {
             #(#kind_variants),*
         }
+    }
+}
+
+fn wrap_in_modules(
+    path: &syn::Path,
+    content: proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    path.segments.iter().rev().fold(content, |inner, segment| {
+        let ident = &segment.ident;
+        quote! {
+            pub mod #ident {
+                #inner
+            }
+        }
+    })
+}
+
+fn kind_import_path(module_prefix: &syn::Path, kind_name: &syn::Ident) -> syn::Path {
+    let mut segments = syn::punctuated::Punctuated::new();
+
+    for _ in 0..module_prefix.segments.len() {
+        segments.push(syn::PathSegment::from(syn::Ident::new(
+            "super",
+            kind_name.span(),
+        )));
+    }
+
+    segments.push(syn::PathSegment::from(kind_name.clone()));
+
+    syn::Path {
+        leading_colon: None,
+        segments,
     }
 }
 
@@ -197,16 +229,21 @@ fn generate_struct_declarations(
         #(#structs)*
     };
 
-    match &args.prefix {
-        Some(prefix) => {
-            let module = format_ident!("{}", prefix);
+    match &args.module_prefix {
+        Some(module_prefix) => {
+            let declarations = if args.struct_with_kind {
+                let import_path = kind_import_path(module_prefix, kind_name);
 
-            quote! {
-                pub mod #module {
-                    use super::#kind_name;
+                quote! {
+                    use #import_path;
+
                     #declarations
                 }
-            }
+            } else {
+                declarations
+            };
+
+            wrap_in_modules(module_prefix, declarations)
         }
         None => declarations,
     }
@@ -221,10 +258,12 @@ fn generate_struct_implementations(
     let implementations = variants.iter().map(|variant| {
         let variant_name = &variant.ident;
 
-        let struct_name: proc_macro2::TokenStream = match &args.prefix {
-            Some(prefix) => {
-                let module = format_ident!("{}", prefix);
-                syn::parse_quote!(#module::#variant_name)
+        let struct_name: syn::Path = match &args.module_prefix {
+            Some(module_prefix) => {
+                let mut path = module_prefix.clone();
+                path.segments
+                    .push(syn::PathSegment::from(variant_name.clone()));
+                path
             }
             None => syn::parse_quote!(#variant_name),
         };

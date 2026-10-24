@@ -218,7 +218,7 @@ fn shape_with_prefix_generates_structs_and_kind() {
     assert_eq!(rect.kind, ShapeWithPrefixKind::Rect);
     assert_eq!(rect.w, 10.0);
     assert_eq!(rect.h, 20.0);
-    assert!(size_of::<Rect>() > 2 * size_of::<f64>()); // + kind
+    assert!(size_of::<prefix::Rect>() > 2 * size_of::<f64>()); // + kind
 
     let tri = prefix::Tri::new(3.0, 4.0, 5.0);
     assert_eq!(tri.kind, ShapeWithPrefixKind::Tri);
@@ -258,6 +258,44 @@ fn converts_between_prefix_shape_and_tagged_structs() {
     let shape: Shape = dot.into();
 
     assert!(matches!(shape, Shape::Dot));
+}
+
+#[variable_enum(struct_with_kind, struct_with_prefix = "prefix3::prefix")]
+#[derive(Debug)]
+pub enum ShapeWithPathPrefix {
+    Circle { r: f64 },
+    Rect { w: f64, h: f64 },
+    Tri { a: f64, b: f64, c: f64 },
+    Dot,
+}
+
+#[test]
+fn shape_with_path_prefix_generates_structs_and_kind() {
+    let circle = prefix3::prefix::Circle::new(5.0);
+    assert_eq!(circle.kind, ShapeWithPathPrefixKind::Circle);
+    assert_eq!(circle.r, 5.0);
+    assert!(size_of::<prefix3::prefix::Circle>() > size_of::<f64>()); // + kind
+
+    let rect = prefix3::prefix::Rect::new(10.0, 20.0);
+    assert_eq!(rect.kind, ShapeWithPathPrefixKind::Rect);
+    assert_eq!(rect.w, 10.0);
+    assert_eq!(rect.h, 20.0);
+    assert!(size_of::<prefix3::prefix::Rect>() > 2 * size_of::<f64>()); // + kind
+
+    let tri = prefix3::prefix::Tri::new(3.0, 4.0, 5.0);
+    assert_eq!(tri.kind, ShapeWithPathPrefixKind::Tri);
+    assert_eq!(tri.c, 5.0);
+    assert!(size_of::<prefix3::prefix::Tri>() > 3 * size_of::<f64>()); // + kind
+
+    let dot = prefix3::prefix::Dot::new();
+    assert_eq!(dot.kind, ShapeWithPathPrefixKind::Dot);
+    assert!(size_of_val(&dot) > 0); // + kind
+    assert!(size_of::<prefix3::prefix::Dot>() > 0); // + kind
+
+    assert_eq!(ShapeWithPathPrefixKind::Circle as u8, 0);
+    assert_eq!(ShapeWithPathPrefixKind::Rect as u8, 1);
+    assert_eq!(ShapeWithPathPrefixKind::Tri as u8, 2);
+    assert_eq!(ShapeWithPathPrefixKind::Dot as u8, 3);
 }
 
 #[variable_enum(struct_with_kind)]

@@ -1,6 +1,6 @@
 use variable_size_enum::variable_enum;
 
-#[variable_enum]
+#[variable_enum(kind)]
 #[derive(Debug)]
 pub enum Shape {
     Circle { r: f64 },
@@ -10,6 +10,15 @@ pub enum Shape {
 }
 
 #[variable_enum]
+#[derive(Debug)]
+pub enum KindlessShape {
+    Circle2 { r: f64 },
+    Rect2 { w: f64, h: f64 },
+    Tri2 { a: f64, b: f64, c: f64 },
+    Dot2,
+}
+
+#[variable_enum(kind)]
 #[derive(Debug)]
 pub enum Many {
     V0,
@@ -361,6 +370,12 @@ fn converts_between_shape_and_tagged_structs() {
         Shape::Circle { r } => assert_eq!(r, 5.0),
         _ => panic!("expected Circle"),
     }
+
+    let dot = Dot::new();
+
+    let shape: Shape = dot.into();
+
+    assert!(matches!(shape, Shape::Dot));
 }
 
 #[test]
@@ -376,10 +391,38 @@ fn conversion_rejects_wrong_variant() {
 }
 
 #[test]
-fn converts_unit_variant() {
-    let dot = Dot::new();
+fn kindless_shape_generates_structs() {
+    let circle = Circle2::new(5.0);
+    assert_eq!(circle.r, 5.0);
 
-    let shape: Shape = dot.into();
+    let rect = Rect2::new(10.0, 20.0);
+    assert_eq!(rect.w, 10.0);
+    assert_eq!(rect.h, 20.0);
 
-    assert!(matches!(shape, Shape::Dot));
+    let tri = Tri2::new(3.0, 4.0, 5.0);
+    assert_eq!(tri.c, 5.0);
+
+    let _dot = Dot2::new();
+}
+
+#[test]
+fn converts_between_kindless_shape_and_tagged_structs() {
+    // Enum -> Circle
+    let shape = KindlessShape::Circle2 { r: 5.0 };
+    let circle = Circle2::try_from(shape).unwrap();
+
+    assert_eq!(circle.r, 5.0);
+
+    // Circle -> enum
+    let shape_again: KindlessShape = circle.into();
+
+    match shape_again {
+        KindlessShape::Circle2 { r } => assert_eq!(r, 5.0),
+        _ => panic!("expected Circle"),
+    }
+
+    let dot = Dot2::new();
+
+    let shape: KindlessShape = dot.into();
+    assert!(matches!(shape, KindlessShape::Dot2));
 }

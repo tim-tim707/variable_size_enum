@@ -18,7 +18,7 @@ pub enum VanillaShape {
     Dot2,
 }
 
-#[variable_enum(kind)]
+#[variable_enum(kind, plain_struct)]
 #[derive(Debug)]
 pub enum ShapeKindlessStruct {
     Circle3 { r: f64 },

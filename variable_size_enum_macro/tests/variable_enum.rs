@@ -298,6 +298,62 @@ fn shape_with_path_prefix_generates_structs_and_kind() {
     assert_eq!(ShapeWithPathPrefixKind::Dot as u8, 3);
 }
 
+#[variable_enum(kind = u8, struct_with_kind, struct_with_prefix = "data_prefix")]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MyData {
+    A { r: u8 },
+    B { w: u8, h: u8 },
+    C { a: u8, b: u16 },
+    D,
+}
+
+#[test]
+fn enum_with_tagged_struct_to_bytes() {
+    let a = data_prefix::A::new(5);
+    assert_eq!(a.kind, MyDataKind::A as u8);
+    assert_eq!(a.r, 5);
+    assert!(size_of::<data_prefix::A>() == 2 * size_of::<u8>()); // + kind
+
+    let b = data_prefix::B::new(10, 20);
+    assert_eq!(b.kind, MyDataKind::B as u8);
+    assert_eq!(b.w, 10);
+    assert_eq!(b.h, 20);
+    assert!(size_of::<data_prefix::B>() == 3 * size_of::<u8>()); // + kind
+
+    let c = data_prefix::C::new(3, 270);
+    assert_eq!(c.kind, MyDataKind::C as u8);
+    assert_eq!(c.b, 270);
+    assert!(size_of::<data_prefix::C>() == 4 * size_of::<u8>()); // + kind
+
+    let d = data_prefix::D::new();
+    assert_eq!(d.kind, MyDataKind::D as u8);
+    assert!(size_of_val(&d) > 0); // + kind
+    assert!(size_of::<data_prefix::D>() > 0); // + kind
+
+    assert_eq!(MyDataKind::A as u8, 0);
+    assert_eq!(MyDataKind::B as u8, 1);
+    assert_eq!(MyDataKind::C as u8, 2);
+    assert_eq!(MyDataKind::D as u8, 3);
+
+    let a_bytes = bytemuck::bytes_of(&a);
+    assert_eq!(a_bytes, [0, 5]); // tag, r
+    let b_bytes = bytemuck::bytes_of(&b);
+    assert_eq!(b_bytes, [1, 10, 20]); // tag w h
+    let c_bytes = bytemuck::bytes_of(&c);
+    assert_eq!(c_bytes, [2, 3, 14, 1]); // tag a, b & 0xFF, b >> 0xFF
+    let d_bytes = bytemuck::bytes_of(&d);
+    assert_eq!(d_bytes, [3]); // tag
+
+    let new_a = bytemuck::from_bytes::<data_prefix::A>(a_bytes);
+    assert_eq!(a, *new_a);
+    let new_b = bytemuck::from_bytes::<data_prefix::B>(b_bytes);
+    assert_eq!(b, *new_b);
+    let new_c = bytemuck::from_bytes::<data_prefix::C>(c_bytes);
+    assert_eq!(c, *new_c);
+    let new_d = bytemuck::from_bytes::<data_prefix::D>(d_bytes);
+    assert_eq!(d, *new_d);
+}
+
 #[variable_enum(kind = u16, struct_with_kind)]
 #[derive(Debug, Copy, Clone)]
 pub enum Many {

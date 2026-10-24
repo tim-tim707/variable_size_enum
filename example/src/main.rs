@@ -11,9 +11,19 @@ pub enum Shape {
 }
 
 fn main() {
-    let d = ShapeDiscriminant::Circle;
+    let d = ShapeKind::Circle;
 
     println!("{d:?}");
 
-    assert_eq!(d, ShapeDiscriminant::Circle);
+    assert_eq!(d, ShapeKind::Circle);
+
+    let circle = Circle::new(5.0);
+    let rect = Rect::new(10.0, 20.0);
+    let dot = Dot::new();
+
+    assert_eq!(circle.kind, ShapeKind::Circle);
+    assert_eq!(rect.kind, ShapeKind::Rect);
+    assert_eq!(dot.kind, ShapeKind::Dot);
+
+    println!("{:?}", circle.r);
 }

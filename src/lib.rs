@@ -10,13 +10,12 @@ use syn::{
     token::Comma,
 };
 
-// Parse boolean flags: #[variable_enum(kind, struct_with_kind, prefixed_struct, module_struct)]
+// Parse boolean flags: #[variable_enum(kind, struct_with_kind, struct_with_prefix = "...", plain_struct)]
 struct VariableEnumArgs {
     kind: bool,
     generate_struct: bool,
     struct_with_kind: bool,
     prefix: Option<String>,
-    module_struct: bool,
 }
 
 impl Parse for VariableEnumArgs {
@@ -24,7 +23,6 @@ impl Parse for VariableEnumArgs {
         let mut kind = false;
         let mut struct_with_kind = false;
         let mut prefix = None;
-        let mut module_struct = false;
 
         // This is to generate an error on empty macro call, and have an explicit user choice of plain_struct
         // The user could only select kind, and in this case no struct would be generated alongside it
@@ -40,13 +38,12 @@ impl Parse for VariableEnumArgs {
                     let value: LitStr = input.parse()?;
                     prefix = Some(value.value());
                 }
-                "module_struct" => module_struct = true,
                 "plain_struct" => plain_struct = true,
                 other => {
                     return Err(syn::Error::new(
                         flag.span(),
                         format!(
-                            "unknown flag '{}', expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'moduleStruct', 'plain_struct'",
+                            "unknown flag '{}', expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
                             other
                         ),
                     ));
@@ -57,10 +54,10 @@ impl Parse for VariableEnumArgs {
             }
         }
 
-        if !(kind | struct_with_kind | module_struct | plain_struct) || prefix.is_some() {
+        if !(kind | struct_with_kind | plain_struct) && prefix.is_none() {
             return Err(syn::Error::new(
                 input.span(),
-                "No flag set: expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'moduleStruct', 'plain_struct'",
+                "No flag set: expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
             ));
         }
 
@@ -84,17 +81,6 @@ impl Parse for VariableEnumArgs {
             generate_struct = true;
         }
 
-        if plain_struct && module_struct {
-            return Err(syn::Error::new(
-                input.span(),
-                "module_struct flag forces the generation of struct. Remove the 'plain_struct' flag",
-            ));
-        }
-
-        if module_struct {
-            generate_struct = true;
-        }
-
         if plain_struct && prefix.is_some() {
             return Err(syn::Error::new(
                 input.span(),
@@ -111,32 +97,8 @@ impl Parse for VariableEnumArgs {
             generate_struct,
             struct_with_kind,
             prefix,
-            module_struct,
         })
     }
-}
-
-fn generate_kind_enum_parts(
-    kind_name: &Ident,
-    variant_name: &Ident,
-) -> (
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-) {
-    let kind_field = quote! {
-        pub kind: #kind_name,
-    };
-
-    let kind_const = quote! {
-        pub const KIND: #kind_name = #kind_name::#variant_name;
-    };
-
-    let kind_initializer = quote! {
-        kind: Self::KIND,
-    };
-
-    (kind_field, kind_const, kind_initializer)
 }
 
 fn generate_kind_enum(
@@ -173,105 +135,145 @@ fn generate_kind_enum(
     }
 }
 
-fn generate_structs(
+fn generate_struct_declarations(
+    variants: &Punctuated<Variant, Comma>,
+    kind_name: &Ident,
+    derives: &[syn::Attribute],
+    args: &VariableEnumArgs,
+) -> proc_macro2::TokenStream {
+    let structs = variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+
+        let struct_name = variant_name;
+
+        let fields = match &variant.fields {
+            Fields::Named(fields) => {
+                let names: Vec<_> = fields
+                    .named
+                    .iter()
+                    .map(|f| f.ident.as_ref().unwrap())
+                    .collect();
+                let types: Vec<_> = fields.named.iter().map(|f| &f.ty).collect();
+
+                quote! {
+                    #(
+                        pub #names: #types
+                    ),*
+                }
+            }
+
+            Fields::Unnamed(fields) => {
+                let names: Vec<_> = (0..fields.unnamed.len())
+                    .map(|i| format_ident!("field_{}", i))
+                    .collect();
+                let types: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
+
+                quote! {
+                    #(
+                        pub #names: #types
+                    ),*
+                }
+            }
+
+            Fields::Unit => quote! {},
+        };
+
+        let kind_field = if args.struct_with_kind {
+            quote! { pub kind: #kind_name, }
+        } else {
+            quote! {}
+        };
+
+        quote! {
+            #(#derives)*
+            pub struct #struct_name {
+                #kind_field
+                #fields
+            }
+        }
+    });
+
+    let declarations = quote! {
+        #(#structs)*
+    };
+
+    match &args.prefix {
+        Some(prefix) => {
+            let module = format_ident!("{}", prefix);
+
+            quote! {
+                pub mod #module {
+                    use super::#kind_name;
+                    #declarations
+                }
+            }
+        }
+        None => declarations,
+    }
+}
+
+fn generate_struct_implementations(
     variants: &Punctuated<Variant, Comma>,
     kind_name: &Ident,
     enum_name: &Ident,
-    derives: &Vec<syn::Attribute>,
     args: &VariableEnumArgs,
-) -> Vec<proc_macro2::TokenStream> {
-    variants
-        .iter()
-        .map(|variant| {
-            let variant_name = &variant.ident;
-            let struct_name = match &args.prefix {
-                Some(prefix) => &format_ident!("{}{}", prefix, variant_name),
-                None => variant_name,
-            };
+) -> proc_macro2::TokenStream {
+    let implementations = variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
 
-            let (
-                field_definitions,
-                constructor_parameters,
-                field_initializers,
-                enum_pattern,
-                enum_constructor,
-            ) = match &variant.fields {
+        let struct_name: proc_macro2::TokenStream = match &args.prefix {
+            Some(prefix) => {
+                let module = format_ident!("{}", prefix);
+                syn::parse_quote!(#module::#variant_name)
+            }
+            None => syn::parse_quote!(#variant_name),
+        };
+
+        let (constructor_parameters, field_initializers, enum_pattern, enum_constructor) =
+            match &variant.fields {
                 Fields::Named(fields) => {
                     let names: Vec<_> = fields
                         .named
                         .iter()
-                        .map(|f| f.ident.as_ref().unwrap().clone())
+                        .map(|f| f.ident.as_ref().unwrap())
                         .collect();
-                    let types: Vec<_> = fields.named.iter().map(|f| f.ty.clone()).collect();
+                    let types: Vec<_> = fields.named.iter().map(|f| &f.ty).collect();
 
-                    let definitions = quote! {
-                        #(
-                            pub #names: #types
-                        ),*
-                    };
-
-                    let parameters = quote! {
-                        #(
-                            #names: #types
-                        ),*
-                    };
-
-                    let initializers = quote! {
-                        #(#names),*
-                    };
-
-                    let pattern = quote! {
-                        #enum_name::#variant_name {
-                            #(#names),*
-                        }
-                    };
-
-                    let constructor = quote! {
-                        #enum_name::#variant_name {
-                            #(#names: value.#names),*
-                        }
-                    };
-
-                    (definitions, parameters, initializers, pattern, constructor)
+                    (
+                        quote! { #(#names: #types),* },
+                        quote! { #(#names),* },
+                        quote! {
+                            #enum_name::#variant_name { #(#names),* }
+                        },
+                        quote! {
+                            #enum_name::#variant_name {
+                                #(#names: value.#names),*
+                            }
+                        },
+                    )
                 }
 
                 Fields::Unnamed(fields) => {
                     let names: Vec<_> = (0..fields.unnamed.len())
                         .map(|i| format_ident!("field_{}", i))
                         .collect();
-                    let types: Vec<_> = fields.unnamed.iter().map(|f| f.ty.clone()).collect();
+                    let types: Vec<_> = fields.unnamed.iter().map(|f| &f.ty).collect();
 
-                    let definitions = quote! {
-                        #(
-                            pub #names: #types
-                        ),*
-                    };
-
-                    let parameters = quote! {
-                        #(
-                            #names: #types
-                        ),*
-                    };
-
-                    let initializers = quote! {
-                        #(#names),*
-                    };
-
-                    let pattern = quote! {
-                        #enum_name::#variant_name(#(#names),*)
-                    };
-
-                    let constructor = quote! {
-                        #enum_name::#variant_name(
-                            #(value.#names),*
-                        )
-                    };
-
-                    (definitions, parameters, initializers, pattern, constructor)
+                    (
+                        quote! { #(#names: #types),* },
+                        quote! { #(#names),* },
+                        quote! {
+                            #enum_name::#variant_name(#(#names),*)
+                        },
+                        quote! {
+                            #enum_name::#variant_name(
+                                #(value.#names),*
+                            )
+                        },
+                    )
                 }
 
                 Fields::Unit => (
-                    quote! {},
                     quote! {},
                     quote! {},
                     quote! { #enum_name::#variant_name },
@@ -279,55 +281,78 @@ fn generate_structs(
                 ),
             };
 
-            // Generate the kind parts
-            let (kind_field, kind_const, kind_initializer) = if args.struct_with_kind {
-                generate_kind_enum_parts(kind_name, variant_name)
-            } else {
-                (quote! {}, quote! {}, quote! {})
-            };
+        let (kind_const, kind_initializer) = if args.struct_with_kind {
+            (
+                quote! {
+                    pub const KIND: #kind_name = #kind_name::#variant_name;
+                },
+                quote! {
+                    kind: Self::KIND,
+                },
+            )
+        } else {
+            (quote! {}, quote! {})
+        };
 
+        let constructor_initializers = if args.struct_with_kind {
             quote! {
-                #(#derives)*
-                pub struct #struct_name {
-                    #kind_field
-                    #field_definitions
-                }
+                #kind_initializer
+                #field_initializers
+            }
+        } else {
+            quote! {
+                #field_initializers
+            }
+        };
 
-                impl #struct_name {
-                    #kind_const
+        quote! {
+            impl #struct_name {
+                #kind_const
 
-                    pub fn new(#constructor_parameters) -> Self {
-                        Self {
-                            #kind_initializer
-                            #field_initializers
-                        }
-                    }
-                }
-
-                // Tagged struct -> enum (infallible)
-                impl From<#struct_name> for #enum_name {
-                    fn from(value: #struct_name) -> Self {
-                        #enum_constructor
-                    }
-                }
-
-                // Enum -> tagged struct (fallible)
-                impl ::core::convert::TryFrom<#enum_name> for #struct_name {
-                    type Error = #enum_name;
-
-                    fn try_from(value: #enum_name) -> Result<Self, Self::Error> {
-                        match value {
-                            #enum_pattern => Ok(Self {
-                                #kind_initializer
-                                #field_initializers
-                            }),
-                            other => Err(other),
-                        }
+                pub fn new(#constructor_parameters) -> Self {
+                    Self {
+                        #constructor_initializers
                     }
                 }
             }
-        })
-        .collect()
+
+            impl From<#struct_name> for #enum_name {
+                fn from(value: #struct_name) -> Self {
+                    #enum_constructor
+                }
+            }
+
+            impl ::core::convert::TryFrom<#enum_name> for #struct_name {
+                type Error = #enum_name;
+
+                fn try_from(value: #enum_name) -> Result<Self, Self::Error> {
+                    match value {
+                        #enum_pattern => Ok(Self {
+                            #constructor_initializers
+                        }),
+                        other => Err(other),
+                    }
+                }
+            }
+        }
+    });
+
+    quote! {
+        #(#implementations)*
+    }
+}
+
+fn generate_structs(
+    variants: &Punctuated<Variant, Comma>,
+    kind_name: &Ident,
+    enum_name: &Ident,
+    derives: &[syn::Attribute],
+    args: &VariableEnumArgs,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let declarations = generate_struct_declarations(variants, kind_name, derives, args);
+    let implementations = generate_struct_implementations(variants, kind_name, enum_name, args);
+
+    (declarations, implementations)
 }
 
 #[proc_macro_attribute]
@@ -345,10 +370,10 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let kind_name = format_ident!("{}Kind", enum_name);
 
-    let generated_structs = if args.generate_struct {
+    let (struct_declarations, struct_implementations) = if args.generate_struct {
         generate_structs(&input.variants, &kind_name, enum_name, &derives, &args)
     } else {
-        vec![]
+        (quote! {}, quote! {})
     };
 
     let kind_enum = if args.kind {
@@ -362,7 +387,8 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
 
         #kind_enum
 
-        #(#generated_structs)*
+        #struct_declarations
+        #struct_implementations
     };
 
     expanded.into()

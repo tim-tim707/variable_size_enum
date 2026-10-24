@@ -1,7 +1,7 @@
 use variable_size_enum::variable_enum;
 
-#[variable_enum(struct_with_kind)]
-#[derive(Debug)]
+#[variable_enum(kind = u64, struct_with_kind)]
+#[derive(Debug, Copy, Clone)]
 pub enum Shape {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -12,23 +12,23 @@ pub enum Shape {
 #[test]
 fn shape_generates_structs_and_kind() {
     let circle = Circle::new(5.0);
-    assert_eq!(circle.kind, ShapeKind::Circle);
+    assert_eq!(circle.kind, ShapeKind::Circle as u64);
     assert_eq!(circle.r, 5.0);
     assert!(size_of::<Circle>() > size_of::<f64>()); // + kind
 
     let rect = Rect::new(10.0, 20.0);
-    assert_eq!(rect.kind, ShapeKind::Rect);
+    assert_eq!(rect.kind, ShapeKind::Rect as u64);
     assert_eq!(rect.w, 10.0);
     assert_eq!(rect.h, 20.0);
     assert!(size_of::<Rect>() > 2 * size_of::<f64>()); // + kind
 
     let tri = Tri::new(3.0, 4.0, 5.0);
-    assert_eq!(tri.kind, ShapeKind::Tri);
+    assert_eq!(tri.kind, ShapeKind::Tri as u64);
     assert_eq!(tri.c, 5.0);
     assert!(size_of::<Tri>() > 3 * size_of::<f64>()); // + kind
 
     let dot = Dot::new();
-    assert_eq!(dot.kind, ShapeKind::Dot);
+    assert_eq!(dot.kind, ShapeKind::Dot as u64);
     assert!(size_of_val(&dot) > 0); // + kind
     assert!(size_of::<Dot>() > 0); // + kind
 }
@@ -57,7 +57,7 @@ fn converts_between_shape_and_tagged_structs() {
     let circle = Circle::try_from(shape).unwrap();
 
     assert_eq!(circle.r, 5.0);
-    assert_eq!(circle.kind, ShapeKind::Circle);
+    assert_eq!(circle.kind, ShapeKind::Circle as u64);
 
     // Circle -> enum
     let shape_again: Shape = circle.into();
@@ -87,7 +87,7 @@ fn conversion_rejects_wrong_variant() {
 }
 
 #[variable_enum(plain_struct)]
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum VanillaShape {
     Circle2 { r: f64 },
     Rect2 { w: f64, h: f64 },
@@ -135,8 +135,8 @@ fn converts_between_vanilla_shape_and_structs() {
     assert!(matches!(shape, VanillaShape::Dot2));
 }
 
-#[variable_enum(kind, plain_struct)]
-#[derive(Debug)]
+#[variable_enum(kind = "u64", plain_struct)]
+#[derive(Debug, Copy, Clone)]
 pub enum ShapeKindlessStruct {
     Circle3 { r: f64 },
     Rect3 { w: f64, h: f64 },
@@ -189,8 +189,8 @@ fn converts_between_shape_and_kindless_structs() {
     assert!(matches!(shape, ShapeKindlessStruct::Dot3));
 }
 
-#[variable_enum(struct_with_kind, struct_with_prefix = "prefix")]
-#[derive(Debug)]
+#[variable_enum(kind = u64, struct_with_kind, struct_with_prefix = "prefix")]
+#[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -198,8 +198,8 @@ pub enum ShapeWithPrefix {
     Dot,
 }
 
-#[variable_enum(struct_with_kind, struct_with_prefix = "prefix2")]
-#[derive(Debug)]
+#[variable_enum(kind = "u64", struct_with_kind, struct_with_prefix = "prefix2")]
+#[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefixNoClash {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -210,23 +210,23 @@ pub enum ShapeWithPrefixNoClash {
 #[test]
 fn shape_with_prefix_generates_structs_and_kind() {
     let circle = prefix::Circle::new(5.0);
-    assert_eq!(circle.kind, ShapeWithPrefixKind::Circle);
+    assert_eq!(circle.kind, ShapeWithPrefixKind::Circle as u64);
     assert_eq!(circle.r, 5.0);
     assert!(size_of::<prefix::Circle>() > size_of::<f64>()); // + kind
 
     let rect = prefix::Rect::new(10.0, 20.0);
-    assert_eq!(rect.kind, ShapeWithPrefixKind::Rect);
+    assert_eq!(rect.kind, ShapeWithPrefixKind::Rect as u64);
     assert_eq!(rect.w, 10.0);
     assert_eq!(rect.h, 20.0);
     assert!(size_of::<prefix::Rect>() > 2 * size_of::<f64>()); // + kind
 
     let tri = prefix::Tri::new(3.0, 4.0, 5.0);
-    assert_eq!(tri.kind, ShapeWithPrefixKind::Tri);
+    assert_eq!(tri.kind, ShapeWithPrefixKind::Tri as u64);
     assert_eq!(tri.c, 5.0);
     assert!(size_of::<prefix::Tri>() > 3 * size_of::<f64>()); // + kind
 
     let dot = prefix::Dot::new();
-    assert_eq!(dot.kind, ShapeWithPrefixKind::Dot);
+    assert_eq!(dot.kind, ShapeWithPrefixKind::Dot as u64);
     assert!(size_of_val(&dot) > 0); // + kind
     assert!(size_of::<prefix::Dot>() > 0); // + kind
 
@@ -243,7 +243,7 @@ fn converts_between_prefix_shape_and_tagged_structs() {
     let circle = prefix::Circle::try_from(shape).unwrap();
 
     assert_eq!(circle.r, 5.0);
-    assert_eq!(circle.kind, ShapeWithPrefixKind::Circle);
+    assert_eq!(circle.kind, ShapeWithPrefixKind::Circle as u64);
 
     // Circle -> enum
     let shape_again: ShapeWithPrefix = circle.into();
@@ -260,8 +260,8 @@ fn converts_between_prefix_shape_and_tagged_structs() {
     assert!(matches!(shape, Shape::Dot));
 }
 
-#[variable_enum(struct_with_kind, struct_with_prefix = "prefix3::prefix")]
-#[derive(Debug)]
+#[variable_enum(kind = u64, struct_with_kind, struct_with_prefix = "prefix3::prefix")]
+#[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPathPrefix {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -272,23 +272,23 @@ pub enum ShapeWithPathPrefix {
 #[test]
 fn shape_with_path_prefix_generates_structs_and_kind() {
     let circle = prefix3::prefix::Circle::new(5.0);
-    assert_eq!(circle.kind, ShapeWithPathPrefixKind::Circle);
+    assert_eq!(circle.kind, ShapeWithPathPrefixKind::Circle as u64);
     assert_eq!(circle.r, 5.0);
     assert!(size_of::<prefix3::prefix::Circle>() > size_of::<f64>()); // + kind
 
     let rect = prefix3::prefix::Rect::new(10.0, 20.0);
-    assert_eq!(rect.kind, ShapeWithPathPrefixKind::Rect);
+    assert_eq!(rect.kind, ShapeWithPathPrefixKind::Rect as u64);
     assert_eq!(rect.w, 10.0);
     assert_eq!(rect.h, 20.0);
     assert!(size_of::<prefix3::prefix::Rect>() > 2 * size_of::<f64>()); // + kind
 
     let tri = prefix3::prefix::Tri::new(3.0, 4.0, 5.0);
-    assert_eq!(tri.kind, ShapeWithPathPrefixKind::Tri);
+    assert_eq!(tri.kind, ShapeWithPathPrefixKind::Tri as u64);
     assert_eq!(tri.c, 5.0);
     assert!(size_of::<prefix3::prefix::Tri>() > 3 * size_of::<f64>()); // + kind
 
     let dot = prefix3::prefix::Dot::new();
-    assert_eq!(dot.kind, ShapeWithPathPrefixKind::Dot);
+    assert_eq!(dot.kind, ShapeWithPathPrefixKind::Dot as u64);
     assert!(size_of_val(&dot) > 0); // + kind
     assert!(size_of::<prefix3::prefix::Dot>() > 0); // + kind
 
@@ -298,8 +298,8 @@ fn shape_with_path_prefix_generates_structs_and_kind() {
     assert_eq!(ShapeWithPathPrefixKind::Dot as u8, 3);
 }
 
-#[variable_enum(struct_with_kind)]
-#[derive(Debug)]
+#[variable_enum(kind = u16, struct_with_kind)]
+#[derive(Debug, Copy, Clone)]
 pub enum Many {
     V0,
     V1,
@@ -595,5 +595,5 @@ fn variants_use_u16_representation() {
 #[test]
 fn generated_unit_struct_has_correct_kind() {
     let value = V279::new();
-    assert_eq!(value.kind, ManyKind::V279);
+    assert_eq!(value.kind, ManyKind::V279 as u16);
 }

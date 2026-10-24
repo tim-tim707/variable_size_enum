@@ -2,8 +2,8 @@
 
 use variable_size_enum::variable_enum;
 
-#[variable_enum(struct_with_kind)]
-#[derive(Debug)]
+#[variable_enum(kind = "u64", struct_with_kind)]
+#[derive(Debug, Copy, Clone)]
 pub enum Shape {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -11,8 +11,8 @@ pub enum Shape {
     Dot,
 }
 
-#[variable_enum(struct_with_kind, struct_with_prefix = "prefix")]
-#[derive(Debug)]
+#[variable_enum(kind = u64, struct_with_kind, struct_with_prefix = "prefix")]
+#[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -31,9 +31,9 @@ fn main() {
     let rect = Rect::new(10.0, 20.0);
     let dot = Dot::new();
 
-    assert_eq!(circle.kind, ShapeKind::Circle);
-    assert_eq!(rect.kind, ShapeKind::Rect);
-    assert_eq!(dot.kind, ShapeKind::Dot);
+    assert_eq!(circle.kind, ShapeKind::Circle as u64);
+    assert_eq!(rect.kind, ShapeKind::Rect as u64);
+    assert_eq!(dot.kind, ShapeKind::Dot as u64);
 
     println!("{:?}", circle.r);
 }

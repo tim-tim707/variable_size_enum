@@ -12,7 +12,7 @@ use syn::{
 
 // Parse boolean flags: #[variable_enum(kind, struct_with_kind, struct_with_prefix = "...", plain_struct)]
 struct VariableEnumArgs {
-    kind: bool,
+    kind: Option<syn::Ident>, // type given by the user to store the kind
     generate_struct: bool,
     struct_with_kind: bool,
     module_prefix: Option<syn::Path>,
@@ -20,7 +20,7 @@ struct VariableEnumArgs {
 
 impl Parse for VariableEnumArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut kind = false;
+        let mut kind = None;
         let mut struct_with_kind = false;
         let mut module_prefix = None;
 
@@ -31,7 +31,28 @@ impl Parse for VariableEnumArgs {
         while !input.is_empty() {
             let flag: Ident = input.parse()?;
             match flag.to_string().as_str() {
-                "kind" => kind = true,
+                "kind" => {
+                    input.parse::<Token![=]>()?;
+
+                    let ty = if input.peek(syn::LitStr) {
+                        let lit: syn::LitStr = input.parse()?;
+                        syn::Ident::new(&lit.value(), lit.span())
+                    } else {
+                        input.parse::<syn::Ident>()?
+                    };
+
+                    match ty.to_string().as_str() {
+                        "u8" | "u16" | "u32" | "u64" => {
+                            kind = Some(ty);
+                        }
+                        _ => {
+                            return Err(syn::Error::new(
+                                ty.span(),
+                                "expected one of: u8, u16, u32, u64",
+                            ));
+                        }
+                    }
+                }
                 "struct_with_kind" => struct_with_kind = true,
                 "struct_with_prefix" => {
                     input.parse::<Token![=]>()?;
@@ -43,7 +64,7 @@ impl Parse for VariableEnumArgs {
                     return Err(syn::Error::new(
                         flag.span(),
                         format!(
-                            "unknown flag '{}', expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
+                            "unknown flag '{}', expected one of 'kind = \"u8 | u16 | u32 | u64\"', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
                             other
                         ),
                     ));
@@ -54,17 +75,17 @@ impl Parse for VariableEnumArgs {
             }
         }
 
-        if !(kind | struct_with_kind | plain_struct) && module_prefix.is_none() {
+        if !(struct_with_kind | plain_struct) && kind.is_none() && module_prefix.is_none() {
             return Err(syn::Error::new(
                 input.span(),
-                "No flag set: expected one of 'kind', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
+                "No flag set: expected one of 'kind = \"u8 | u16 | u32 | u64\"', 'struct_with_kind', 'struct_with_prefix = \"...\"', 'plain_struct'",
             ));
         }
 
-        if kind && struct_with_kind {
+        if struct_with_kind && kind.is_none() {
             return Err(syn::Error::new(
                 input.span(),
-                "struct_with_kind flag forces the generation of kind. Remove the 'kind' flag",
+                "struct_with_kind flag requires a kind size. Add kind = \"u8 | u16 | u32 | u64\"",
             ));
         }
         if plain_struct && struct_with_kind {
@@ -77,7 +98,6 @@ impl Parse for VariableEnumArgs {
         let mut generate_struct = plain_struct;
         // Force the generation of kind and struct if flag request it
         if struct_with_kind {
-            kind = true;
             generate_struct = true;
         }
 
@@ -104,19 +124,9 @@ impl Parse for VariableEnumArgs {
 fn generate_kind_enum(
     variants: &Punctuated<Variant, Comma>,
     kind_name: &Ident,
+    kind_repr: &Ident,
     visibility: &Visibility,
 ) -> proc_macro2::TokenStream {
-    let variant_count = variants.len();
-    let repr = if variant_count <= (u8::MAX as usize) + 1 {
-        quote! { u8 }
-    } else if variant_count <= (u16::MAX as usize) + 1 {
-        quote! { u16 }
-    } else if variant_count <= (u32::MAX as usize) + 1 {
-        quote! { u32 }
-    } else {
-        quote! { u64 }
-    };
-
     let kind_variants = variants.iter().enumerate().map(|(index, variant)| {
         let name = &variant.ident;
         let value = syn::LitInt::new(&index.to_string(), variant.ident.span());
@@ -127,7 +137,7 @@ fn generate_kind_enum(
     });
 
     quote! {
-        #[repr(#repr)]
+        #[repr(#kind_repr)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         #visibility enum #kind_name {
             #(#kind_variants),*
@@ -149,27 +159,8 @@ fn wrap_in_modules(
     })
 }
 
-fn kind_import_path(module_prefix: &syn::Path, kind_name: &syn::Ident) -> syn::Path {
-    let mut segments = syn::punctuated::Punctuated::new();
-
-    for _ in 0..module_prefix.segments.len() {
-        segments.push(syn::PathSegment::from(syn::Ident::new(
-            "super",
-            kind_name.span(),
-        )));
-    }
-
-    segments.push(syn::PathSegment::from(kind_name.clone()));
-
-    syn::Path {
-        leading_colon: None,
-        segments,
-    }
-}
-
 fn generate_struct_declarations(
     variants: &Punctuated<Variant, Comma>,
-    kind_name: &Ident,
     derives: &[syn::Attribute],
     args: &VariableEnumArgs,
 ) -> proc_macro2::TokenStream {
@@ -210,13 +201,17 @@ fn generate_struct_declarations(
             Fields::Unit => quote! {},
         };
 
-        let kind_field = if args.struct_with_kind {
-            quote! { pub kind: #kind_name, }
+        let kind_field = if args.struct_with_kind
+            && let Some(kind_repr) = &args.kind
+        {
+            quote! { pub kind: #kind_repr, }
         } else {
             quote! {}
         };
 
         quote! {
+            #[repr(C)]
+            #[derive(bytemuck::Pod, bytemuck::Zeroable)]
             #(#derives)*
             pub struct #struct_name {
                 #kind_field
@@ -232,11 +227,7 @@ fn generate_struct_declarations(
     match &args.module_prefix {
         Some(module_prefix) => {
             let declarations = if args.struct_with_kind {
-                let import_path = kind_import_path(module_prefix, kind_name);
-
                 quote! {
-                    use #import_path;
-
                     #declarations
                 }
             } else {
@@ -320,13 +311,15 @@ fn generate_struct_implementations(
                 ),
             };
 
-        let (kind_const, kind_initializer) = if args.struct_with_kind {
+        let (kind_const, kind_initializer) = if args.struct_with_kind
+            && let Some(kind_repr) = &args.kind
+        {
             (
                 quote! {
                     pub const KIND: #kind_name = #kind_name::#variant_name;
                 },
                 quote! {
-                    kind: Self::KIND,
+                    kind: Self::KIND as #kind_repr,
                 },
             )
         } else {
@@ -388,7 +381,7 @@ fn generate_structs(
     derives: &[syn::Attribute],
     args: &VariableEnumArgs,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let declarations = generate_struct_declarations(variants, kind_name, derives, args);
+    let declarations = generate_struct_declarations(variants, derives, args);
     let implementations = generate_struct_implementations(variants, kind_name, enum_name, args);
 
     (declarations, implementations)
@@ -415,8 +408,8 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         (quote! {}, quote! {})
     };
 
-    let kind_enum = if args.kind {
-        generate_kind_enum(&input.variants, &kind_name, &input.vis)
+    let kind_enum = if let Some(kind_repr) = args.kind {
+        generate_kind_enum(&input.variants, &kind_name, &kind_repr, &input.vis)
     } else {
         quote! {}
     };

@@ -39,7 +39,7 @@ impl Parse for VariableEnumArgs {
                     return Err(syn::Error::new(
                         flag.span(),
                         format!(
-                            "unknown flag '{}', expected one of 'kind', 'plain_struct', 'prefixedStruct', 'moduleStruct'",
+                            "unknown flag '{}', expected one of 'kind', 'struct_with_kind', 'plain_struct', 'prefixedStruct', 'moduleStruct'",
                             other
                         ),
                     ));
@@ -48,6 +48,13 @@ impl Parse for VariableEnumArgs {
             if !input.is_empty() {
                 input.parse::<Token![,]>()?;
             }
+        }
+
+        if !(kind | struct_with_kind | prefixed_struct | module_struct | plain_struct) {
+            return Err(syn::Error::new(
+                input.span(),
+                "No flag set: expected one of 'kind', 'struct_with_kind', 'plain_struct', 'prefixedStruct', 'moduleStruct'",
+            ));
         }
 
         // Force the generation of kind if structs need it

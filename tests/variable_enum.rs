@@ -9,7 +9,7 @@ pub enum Shape {
     Dot,
 }
 
-#[variable_enum]
+#[variable_enum(plain_struct)]
 #[derive(Debug)]
 pub enum VanillaShape {
     Circle2 { r: f64 },

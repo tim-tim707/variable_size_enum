@@ -1,6 +1,6 @@
 use variable_size_enum::variable_enum;
 
-#[variable_enum(kind)]
+#[variable_enum(struct_with_kind)]
 #[derive(Debug)]
 pub enum Shape {
     Circle { r: f64 },
@@ -11,7 +11,7 @@ pub enum Shape {
 
 #[variable_enum]
 #[derive(Debug)]
-pub enum KindlessShape {
+pub enum VanillaShape {
     Circle2 { r: f64 },
     Rect2 { w: f64, h: f64 },
     Tri2 { a: f64, b: f64, c: f64 },
@@ -19,6 +19,15 @@ pub enum KindlessShape {
 }
 
 #[variable_enum(kind)]
+#[derive(Debug)]
+pub enum ShapeKindlessStruct {
+    Circle3 { r: f64 },
+    Rect3 { w: f64, h: f64 },
+    Tri3 { a: f64, b: f64, c: f64 },
+    Dot3,
+}
+
+#[variable_enum(struct_with_kind)]
 #[derive(Debug)]
 pub enum Many {
     V0,
@@ -308,18 +317,23 @@ fn shape_generates_structs_and_kind() {
     let circle = Circle::new(5.0);
     assert_eq!(circle.kind, ShapeKind::Circle);
     assert_eq!(circle.r, 5.0);
+    assert!(size_of::<Circle>() > size_of::<f64>()); // + kind
 
     let rect = Rect::new(10.0, 20.0);
     assert_eq!(rect.kind, ShapeKind::Rect);
     assert_eq!(rect.w, 10.0);
     assert_eq!(rect.h, 20.0);
+    assert!(size_of::<Rect>() > 2 * size_of::<f64>()); // + kind
 
     let tri = Tri::new(3.0, 4.0, 5.0);
     assert_eq!(tri.kind, ShapeKind::Tri);
     assert_eq!(tri.c, 5.0);
+    assert!(size_of::<Tri>() > 3 * size_of::<f64>()); // + kind
 
     let dot = Dot::new();
     assert_eq!(dot.kind, ShapeKind::Dot);
+    assert!(size_of_val(&dot) > 0); // + kind
+    assert!(size_of::<Dot>() > 0); // + kind
 }
 
 #[test]
@@ -391,38 +405,86 @@ fn conversion_rejects_wrong_variant() {
 }
 
 #[test]
-fn kindless_shape_generates_structs() {
+fn vanilla_shape_generates_structs() {
     let circle = Circle2::new(5.0);
     assert_eq!(circle.r, 5.0);
+    assert!(size_of::<Circle2>() == size_of::<f64>());
 
     let rect = Rect2::new(10.0, 20.0);
     assert_eq!(rect.w, 10.0);
     assert_eq!(rect.h, 20.0);
+    assert!(size_of::<Rect2>() == 2 * size_of::<f64>());
 
     let tri = Tri2::new(3.0, 4.0, 5.0);
     assert_eq!(tri.c, 5.0);
+    assert!(size_of::<Tri2>() == 3 * size_of::<f64>());
 
-    let _dot = Dot2::new();
+    let dot = Dot2::new();
+    assert!(size_of_val(&dot) == 0);
+    assert!(size_of::<Dot2>() == 0);
 }
 
 #[test]
-fn converts_between_kindless_shape_and_tagged_structs() {
+fn converts_between_vanilla_shape_and_structs() {
     // Enum -> Circle
-    let shape = KindlessShape::Circle2 { r: 5.0 };
+    let shape = VanillaShape::Circle2 { r: 5.0 };
     let circle = Circle2::try_from(shape).unwrap();
 
-    assert_eq!(circle.r, 5.0);
-
     // Circle -> enum
-    let shape_again: KindlessShape = circle.into();
+    let shape_again: VanillaShape = circle.into();
 
     match shape_again {
-        KindlessShape::Circle2 { r } => assert_eq!(r, 5.0),
+        VanillaShape::Circle2 { r } => assert_eq!(r, 5.0),
         _ => panic!("expected Circle"),
     }
 
     let dot = Dot2::new();
 
-    let shape: KindlessShape = dot.into();
-    assert!(matches!(shape, KindlessShape::Dot2));
+    let shape: VanillaShape = dot.into();
+    assert!(matches!(shape, VanillaShape::Dot2));
+}
+
+#[test]
+fn shape_generates_kindless_structs_and_kind() {
+    let circle = Circle3::new(5.0);
+    assert_eq!(circle.r, 5.0);
+    assert!(size_of::<Circle3>() == size_of::<f64>());
+
+    let rect = Rect3::new(10.0, 20.0);
+    assert_eq!(rect.w, 10.0);
+    assert_eq!(rect.h, 20.0);
+    assert!(size_of::<Rect3>() == 2 * size_of::<f64>());
+
+    let tri = Tri3::new(3.0, 4.0, 5.0);
+    assert_eq!(tri.c, 5.0);
+    assert!(size_of::<Tri3>() == 3 * size_of::<f64>());
+
+    let dot = Dot3::new();
+    assert!(size_of_val(&dot) == 0);
+    assert!(size_of::<Dot3>() == 0);
+
+    assert_eq!(ShapeKindlessStructKind::Circle3 as u8, 0);
+    assert_eq!(ShapeKindlessStructKind::Rect3 as u8, 1);
+    assert_eq!(ShapeKindlessStructKind::Tri3 as u8, 2);
+    assert_eq!(ShapeKindlessStructKind::Dot3 as u8, 3);
+}
+
+#[test]
+fn converts_between_shape_and_kindless_structs() {
+    // Enum -> Circle
+    let shape = ShapeKindlessStruct::Circle3 { r: 5.0 };
+    let circle = Circle3::try_from(shape).unwrap();
+
+    // Circle -> enum
+    let shape_again: ShapeKindlessStruct = circle.into();
+
+    match shape_again {
+        ShapeKindlessStruct::Circle3 { r } => assert_eq!(r, 5.0),
+        _ => panic!("expected Circle"),
+    }
+
+    let dot = Dot3::new();
+
+    let shape: ShapeKindlessStruct = dot.into();
+    assert!(matches!(shape, ShapeKindlessStruct::Dot3));
 }

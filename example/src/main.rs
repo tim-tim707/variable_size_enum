@@ -2,7 +2,7 @@
 
 use variable_size_enum::variable_enum;
 
-#[variable_enum(kind)]
+#[variable_enum(struct_with_kind)]
 #[derive(Debug)]
 pub enum Shape {
     Circle { r: f64 },

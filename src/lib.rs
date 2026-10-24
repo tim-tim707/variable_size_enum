@@ -3,9 +3,11 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    Fields, Ident, ItemEnum, Token,
+    Fields, Ident, ItemEnum, Token, Variant, Visibility,
     parse::{Parse, ParseStream},
     parse_macro_input,
+    punctuated::Punctuated,
+    token::Comma,
 };
 
 // Parse boolean flags: #[variable_enum(kind, struct_with_kind, prefixed_struct, module_struct, plain_struct)]
@@ -47,6 +49,12 @@ impl Parse for VariableEnumArgs {
                 input.parse::<Token![,]>()?;
             }
         }
+
+        // Force the generation of kind if structs need it
+        if struct_with_kind {
+            kind = true;
+        }
+
         Ok(VariableEnumArgs {
             kind,
             struct_with_kind,
@@ -57,13 +65,69 @@ impl Parse for VariableEnumArgs {
     }
 }
 
+fn generate_kind_enum_parts(
+    kind_name: &Ident,
+    variant_name: &Ident,
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
+    let kind_field = quote! {
+        pub kind: #kind_name,
+    };
+
+    let kind_const = quote! {
+        pub const KIND: #kind_name = #kind_name::#variant_name;
+    };
+
+    let kind_initializer = quote! {
+        kind: Self::KIND,
+    };
+
+    (kind_field, kind_const, kind_initializer)
+}
+
+fn generate_kind_enum(
+    variants: &Punctuated<Variant, Comma>,
+    kind_name: &Ident,
+    visibility: &Visibility,
+) -> proc_macro2::TokenStream {
+    let variant_count = variants.len();
+    let repr = if variant_count <= (u8::MAX as usize) + 1 {
+        quote! { u8 }
+    } else if variant_count <= (u16::MAX as usize) + 1 {
+        quote! { u16 }
+    } else if variant_count <= (u32::MAX as usize) + 1 {
+        quote! { u32 }
+    } else {
+        quote! { u64 }
+    };
+
+    let kind_variants = variants.iter().enumerate().map(|(index, variant)| {
+        let name = &variant.ident;
+        let value = syn::LitInt::new(&index.to_string(), variant.ident.span());
+
+        quote! {
+            #name = #value
+        }
+    });
+
+    quote! {
+        #[repr(#repr)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #visibility enum #kind_name {
+            #(#kind_variants),*
+        }
+    }
+}
+
 #[proc_macro_attribute]
 pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as VariableEnumArgs);
     let input = parse_macro_input!(item as ItemEnum);
 
     let enum_name = &input.ident;
-    let vis = &input.vis;
     let derives: Vec<_> = input
         .attrs
         .iter()
@@ -168,28 +232,10 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         };
 
         // Generate the kind parts
-        let kind_field = if args.kind {
-            quote! {
-                pub kind: #kind_name,
-            }
+        let (kind_field, kind_const, kind_initializer) = if args.struct_with_kind {
+            generate_kind_enum_parts(&kind_name, variant_name)
         } else {
-            quote! {}
-        };
-
-        let kind_const = if args.kind {
-            quote! {
-                pub const KIND: #kind_name = #kind_name::#variant_name;
-            }
-        } else {
-            quote! {}
-        };
-
-        let kind_initializer = if args.kind {
-            quote! {
-                kind: Self::KIND,
-            }
-        } else {
-            quote! {}
+            (quote! {}, quote! {}, quote! {})
         };
 
         quote! {
@@ -234,35 +280,8 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
-    // Generate the kind enum
     let kind_enum = if args.kind {
-        let variant_count = input.variants.len();
-        let repr = if variant_count <= (u8::MAX as usize) + 1 {
-            quote! { u8 }
-        } else if variant_count <= (u16::MAX as usize) + 1 {
-            quote! { u16 }
-        } else if variant_count <= (u32::MAX as usize) + 1 {
-            quote! { u32 }
-        } else {
-            quote! { u64 }
-        };
-
-        let kind_variants = input.variants.iter().enumerate().map(|(index, variant)| {
-            let name = &variant.ident;
-            let value = syn::LitInt::new(&index.to_string(), variant.ident.span());
-
-            quote! {
-                #name = #value
-            }
-        });
-
-        quote! {
-            #[repr(#repr)]
-            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-            #vis enum #kind_name {
-                #(#kind_variants),*
-            }
-        }
+        generate_kind_enum(&input.variants, &kind_name, &input.vis)
     } else {
         quote! {}
     };

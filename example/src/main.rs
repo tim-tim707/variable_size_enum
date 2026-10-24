@@ -3,6 +3,7 @@
 use variable_size_enum::variable_enum;
 
 #[variable_enum]
+#[derive(Debug)]
 pub enum Shape {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },

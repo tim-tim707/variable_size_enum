@@ -1,6 +1,7 @@
 use variable_size_enum::variable_enum;
 
 #[variable_enum]
+#[derive(Debug)]
 pub enum Shape {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -9,6 +10,7 @@ pub enum Shape {
 }
 
 #[variable_enum]
+#[derive(Debug)]
 pub enum Many {
     V0,
     V1,
@@ -332,4 +334,52 @@ fn variants_use_u16_representation() {
 fn generated_unit_struct_has_correct_kind() {
     let value = V279::new();
     assert_eq!(value.kind, ManyKind::V279);
+}
+
+#[test]
+fn generated_structs_implement_debug() {
+    let circle = Circle::new(5.0);
+    let output = format!("{:?}", circle);
+
+    assert!(output.contains("Circle"));
+    assert!(output.contains("5.0"));
+}
+
+#[test]
+fn converts_between_shape_and_tagged_structs() {
+    // Enum -> Circle
+    let shape = Shape::Circle { r: 5.0 };
+    let circle = Circle::try_from(shape).unwrap();
+
+    assert_eq!(circle.r, 5.0);
+    assert_eq!(circle.kind, ShapeKind::Circle);
+
+    // Circle -> enum
+    let shape_again: Shape = circle.into();
+
+    match shape_again {
+        Shape::Circle { r } => assert_eq!(r, 5.0),
+        _ => panic!("expected Circle"),
+    }
+}
+
+#[test]
+fn conversion_rejects_wrong_variant() {
+    let shape = Shape::Dot;
+
+    let result = Circle::try_from(shape);
+
+    assert!(result.is_err());
+
+    // The original enum is preserved on failure.
+    assert!(matches!(result.unwrap_err(), Shape::Dot));
+}
+
+#[test]
+fn converts_unit_variant() {
+    let dot = Dot::new();
+
+    let shape: Shape = dot.into();
+
+    assert!(matches!(shape, Shape::Dot));
 }

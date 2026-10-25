@@ -18,6 +18,7 @@ pub trait VariableEnum: Sized {
 pub struct VariableVec<T> {
     variable_enum: std::marker::PhantomData<T>,
     storage: Vec<u8>,
+    pub len: usize,
 }
 
 impl<T> VariableVec<T>
@@ -28,7 +29,20 @@ where
         Self {
             variable_enum: PhantomData,
             storage: Vec::new(),
+            len: 0,
         }
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    pub const fn used_bytes(&self) -> usize {
+        self.storage.len()
     }
 
     pub fn push(&mut self, item: T) {
@@ -43,6 +57,8 @@ where
         unsafe {
             self.storage.set_len(start + written);
         }
+
+        self.len += 1;
     }
 }
 

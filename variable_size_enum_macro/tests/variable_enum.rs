@@ -89,6 +89,7 @@ fn conversion_rejects_wrong_variant() {
 #[test]
 fn variable_vec_iter_returns_all_variants_in_order() {
     let mut shapes = VariableVec::<Shape>::new();
+    assert!(shapes.is_empty());
 
     let expected = [
         Shape::Circle { r: 2.5 },
@@ -104,6 +105,8 @@ fn variable_vec_iter_returns_all_variants_in_order() {
     for shape in expected {
         shapes.push(shape);
     }
+    assert_eq!(shapes.len(), 4);
+    assert!(shapes.used_bytes() < size_of_val(&expected)); // Expected memory gain
 
     let actual: Vec<Shape> = shapes.iter().collect();
 
@@ -113,6 +116,7 @@ fn variable_vec_iter_returns_all_variants_in_order() {
 #[test]
 fn variable_vec_iter_handles_empty_vector() {
     let shapes = VariableVec::<Shape>::new();
+    assert!(shapes.is_empty());
 
     assert_eq!(shapes.iter().count(), 0);
     assert_eq!(shapes.iter().next(), None);
@@ -127,6 +131,7 @@ fn variable_vec_iter_can_be_reused() {
 
     assert_eq!(shapes.iter().count(), 2);
     assert_eq!(shapes.iter().count(), 2);
+    assert_eq!(shapes.len(), 2);
 }
 
 #[test]
@@ -143,6 +148,7 @@ fn variable_vec_iter_handles_mixed_size_variants() {
     shapes.push(Shape::Rect { w: 5.0, h: 6.0 });
     shapes.push(Shape::Dot);
 
+    assert_eq!(shapes.len(), 5);
     let actual: Vec<Shape> = shapes.iter().collect();
 
     assert_eq!(
@@ -168,8 +174,10 @@ fn variable_vec_iter_does_not_consume_the_vector() {
     shapes.push(Shape::Circle { r: 7.0 });
     shapes.push(Shape::Rect { w: 8.0, h: 9.0 });
 
+    assert_eq!(shapes.len(), 2);
     let first_pass: Vec<Shape> = shapes.iter().collect();
     let second_pass: Vec<Shape> = shapes.iter().collect();
+    assert_eq!(shapes.len(), 2);
 
     assert_eq!(first_pass, second_pass);
     assert_eq!(shapes.iter().count(), 2);

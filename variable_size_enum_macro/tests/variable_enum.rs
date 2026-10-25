@@ -1,7 +1,7 @@
-use variable_size_enum::variable_enum;
+use variable_size_enum::{VariableEnum, VariableVec, variable_enum};
 
 #[variable_enum(kind = u64)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Shape {
     Circle { r: f64 },
     Rect { w: f64, h: f64 },
@@ -86,6 +86,126 @@ fn conversion_rejects_wrong_variant() {
     assert!(matches!(result.unwrap_err(), Shape::Dot));
 }
 
+#[test]
+fn variable_vec_iter_returns_all_variants_in_order() {
+    let mut shapes = VariableVec::<Shape>::new();
+
+    let expected = [
+        Shape::Circle { r: 2.5 },
+        Shape::Rect { w: 3.0, h: 4.0 },
+        Shape::Tri {
+            a: 3.0,
+            b: 4.0,
+            c: 5.0,
+        },
+        Shape::Dot,
+    ];
+
+    for shape in expected {
+        shapes.push(shape);
+    }
+
+    let actual: Vec<Shape> = shapes.iter().collect();
+
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn variable_vec_iter_handles_empty_vector() {
+    let shapes = VariableVec::<Shape>::new();
+
+    assert_eq!(shapes.iter().count(), 0);
+    assert_eq!(shapes.iter().next(), None);
+}
+
+#[test]
+fn variable_vec_iter_can_be_reused() {
+    let mut shapes = VariableVec::<Shape>::new();
+
+    shapes.push(Shape::Circle { r: 1.0 });
+    shapes.push(Shape::Dot);
+
+    assert_eq!(shapes.iter().count(), 2);
+    assert_eq!(shapes.iter().count(), 2);
+}
+
+#[test]
+fn variable_vec_iter_handles_mixed_size_variants() {
+    let mut shapes = VariableVec::<Shape>::new();
+
+    shapes.push(Shape::Dot);
+    shapes.push(Shape::Tri {
+        a: 1.0,
+        b: 2.0,
+        c: 3.0,
+    });
+    shapes.push(Shape::Circle { r: 4.0 });
+    shapes.push(Shape::Rect { w: 5.0, h: 6.0 });
+    shapes.push(Shape::Dot);
+
+    let actual: Vec<Shape> = shapes.iter().collect();
+
+    assert_eq!(
+        actual,
+        vec![
+            Shape::Dot,
+            Shape::Tri {
+                a: 1.0,
+                b: 2.0,
+                c: 3.0,
+            },
+            Shape::Circle { r: 4.0 },
+            Shape::Rect { w: 5.0, h: 6.0 },
+            Shape::Dot,
+        ]
+    );
+}
+
+#[test]
+fn variable_vec_iter_does_not_consume_the_vector() {
+    let mut shapes = VariableVec::<Shape>::new();
+
+    shapes.push(Shape::Circle { r: 7.0 });
+    shapes.push(Shape::Rect { w: 8.0, h: 9.0 });
+
+    let first_pass: Vec<Shape> = shapes.iter().collect();
+    let second_pass: Vec<Shape> = shapes.iter().collect();
+
+    assert_eq!(first_pass, second_pass);
+    assert_eq!(shapes.iter().count(), 2);
+}
+
+#[test]
+fn variable_vec_round_trips_each_shape_through_bytes() {
+    let expected = [
+        Shape::Circle { r: 2.5 },
+        Shape::Rect { w: 3.0, h: 4.0 },
+        Shape::Tri {
+            a: 3.0,
+            b: 4.0,
+            c: 5.0,
+        },
+        Shape::Dot,
+    ];
+
+    for shape in expected {
+        let mut bytes = Vec::<u8>::with_capacity(Shape::MAX_SIZE);
+
+        let written = shape.write_to_uninit(&mut bytes.spare_capacity_mut()[..Shape::MAX_SIZE]);
+
+        // SAFETY: write_to_uninit must guarantee that the first
+        // `written` bytes have been initialized.
+        unsafe {
+            bytes.set_len(written);
+        }
+
+        let (decoded, consumed) = Shape::from_bytes(&bytes);
+
+        assert_eq!(decoded, shape);
+        assert_eq!(consumed, written);
+    }
+}
+
 #[variable_enum(kind = u64, struct_with_prefix = "prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
@@ -150,11 +270,11 @@ fn converts_between_prefix_shape_and_tagged_structs() {
         _ => panic!("expected Circle"),
     }
 
-    let dot = Dot::new();
+    let dot = prefix::Dot::new();
 
-    let shape: Shape = dot.into();
+    let shape: ShapeWithPrefix = dot.into();
 
-    assert!(matches!(shape, Shape::Dot));
+    assert!(matches!(shape, ShapeWithPrefix::Dot));
 }
 
 #[variable_enum(kind = u64, struct_with_prefix = "prefix3::prefix")]

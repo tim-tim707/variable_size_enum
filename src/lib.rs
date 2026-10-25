@@ -55,16 +55,50 @@ where
     }
 }
 
-impl<T> Iterator for VariableVec<T> {
+pub struct VariableVecIter<'a, T> {
+    storage: &'a [u8],
+    offset: usize,
+    _marker: PhantomData<T>,
+}
+
+impl<T> VariableVec<T> {
+    pub fn iter(&self) -> VariableVecIter<'_, T> {
+        VariableVecIter {
+            storage: &self.storage,
+            offset: 0,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T: VariableEnum> Iterator for VariableVecIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if false {
-            // Some(from_bytes()); offset += from_bytes().len
-            None
-        } else {
-            None
+        if self.offset >= self.storage.len() {
+            return None;
         }
+
+        let remaining = &self.storage[self.offset..];
+        let (item, bytes_read) = T::from_bytes(remaining);
+
+        debug_assert!(
+            bytes_read > 0 && bytes_read <= remaining.len(),
+            "invalid byte count returned by VariableEnum::from_bytes"
+        );
+
+        self.offset += bytes_read;
+
+        Some(item)
+    }
+}
+
+impl<'a, T: VariableEnum> IntoIterator for &'a VariableVec<T> {
+    type Item = T;
+    type IntoIter = VariableVecIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

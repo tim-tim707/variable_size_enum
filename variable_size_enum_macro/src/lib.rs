@@ -384,9 +384,7 @@ fn generate_enum_implementation(
 
         quote! {
             kind if kind == #struct_name::KIND as #kind_repr => {
-                if bytes.len() < ::core::mem::size_of::<#struct_name>() {
-                    panic!("Not enough bytes for enum variant");
-                }
+                debug_assert!(bytes.len() >= ::core::mem::size_of::<#struct_name>(), "Not enough bytes for enum variant");
 
                 let value =
                     ::variable_size_enum::bytemuck::pod_read_unaligned::<#struct_name>(
@@ -453,9 +451,7 @@ fn generate_enum_implementation(
                 let value = #struct_name::new(#constructor_args);
                 let written = ::core::mem::size_of::<#struct_name>();
 
-                if out.len() < written {
-                    panic!("output buffer too small");
-                }
+                debug_assert!(out.len() >= written, "output buffer too small");
 
                 // write_unaligned instead of bytemuck::bytes_of + copy_from_slice
                 // Could also build the struct in-place ?
@@ -497,9 +493,7 @@ fn generate_enum_implementation(
             fn from_bytes(bytes: &[u8]) -> (Self, usize) {
                 let kind_size = ::core::mem::size_of::<#kind_repr>();
 
-                if bytes.len() < kind_size {
-                    panic!("bytes too short to contain enum kind");
-                }
+                debug_assert!(bytes.len() >= kind_size, "bytes too short to contain enum kind");
 
                 let kind =
                     ::variable_size_enum::bytemuck::pod_read_unaligned::<#kind_repr>(

@@ -1,0 +1,16 @@
+error[E0599]: the function or associated item `new` exists for struct `CompactVec<Shape>`, but its trait bounds were not satisfied
+  --> tests/failures/compact_vec_invalid_enum.rs:13:39
+   |
+ 5 | pub enum Shape {
+   | -------------- doesn't satisfy `Shape: VariableSizeEnum`
+...
+13 |     let shapes = CompactVec::<Shape>::new();
+   |                                       ^^^ function or associated item cannot be called on `CompactVec<Shape>` due to unsatisfied trait bounds
+   |
+   = note: the following trait bounds were not satisfied:
+           `Shape: VariableSizeEnum`
+note: the trait `VariableSizeEnum` must be implemented
+  --> $WORKSPACE/src/lib.rs
+   |
+   | pub trait VariableSizeEnum: Sized {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

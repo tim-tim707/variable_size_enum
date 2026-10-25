@@ -1,0 +1,5 @@
+error: enum `TooManyVariants` has 257 variants, but `u8` can represent only discriminants from 0 to 255
+ --> tests/failures/too_many_variants.rs:4:6
+  |
+4 | enum TooManyVariants {
+  |      ^^^^^^^^^^^^^^^

@@ -22,10 +22,7 @@ pub struct CompactVec<T> {
     pub len: usize,
 }
 
-impl<T> CompactVec<T>
-where
-    T: VariableSizeEnum,
-{
+impl<T: VariableSizeEnum> CompactVec<T> {
     pub fn new() -> Self {
         Self {
             variable_size_enum: PhantomData,
@@ -63,10 +60,7 @@ where
     }
 }
 
-impl<T> Default for CompactVec<T>
-where
-    T: VariableSizeEnum,
-{
+impl<T: VariableSizeEnum> Default for CompactVec<T> {
     fn default() -> Self {
         Self::new()
     }

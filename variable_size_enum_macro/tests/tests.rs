@@ -678,3 +678,9 @@ fn generated_unit_struct_has_correct_kind() {
     let value = V279::new();
     assert_eq!(value.kind, ManyKind::V279 as u16);
 }
+
+#[test]
+fn compile_fail_tests() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/failures/*.rs");
+}

@@ -1,0 +1,5 @@
+error: expected one of: u8, u16, u32, u64
+ --> tests/failures/invalid_kind.rs:3:29
+  |
+3 | #[variable_size_enum(kind = u)]
+  |                             ^

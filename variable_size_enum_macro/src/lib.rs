@@ -101,7 +101,7 @@ fn validate_variant_count(
         return Err(syn::Error::new_spanned(
             enum_name,
             format!(
-                "enum `{}` has {} variants, but `{}` can represent only {} distinct discriminants",
+                "enum `{}` has {} variants, but `{}` can represent only discriminants from 0 to {}",
                 enum_name,
                 variants_len,
                 quote::quote!(#kind),
@@ -544,7 +544,7 @@ fn generate_enum_implementation(
     }
 }
 
-/// Generates compact, byte-serializable representations for each variant of an enum.
+/// Generates compact representations for each variant of an enum.
 ///
 /// The macro creates a `#[repr(C)] #[bytemuck::Pod] #[bytemuck::Zeroable]` struct
 /// for each enum variant. Each generated struct contains a discriminant field (`kind`)

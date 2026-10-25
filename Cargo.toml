@@ -2,10 +2,13 @@
 name = "variable_size_enum"
 version = "0.1.0"
 edition = "2024"
+description = "Compact representations for Rust enums"
+repository = "https://github.com/tim-tim707/variable_size_enum"
+license = "MIT"
 
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
-variable_size_enum_macro = { path = "variable_size_enum_macro" }
+variable_size_enum_macro = { path = "variable_size_enum_macro", version = "0.1.0" }
 
 [workspace]
 default-members = [".", "variable_size_enum_macro", "example"]

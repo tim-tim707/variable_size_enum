@@ -1,11 +1,3 @@
-# Variable size enum for Rust
-
-cargo build
-cargo run -p example
-cargo test
-
-Inspired by the goose programming language variable size enum 05_shapes.goose
-
 # `variable_size_enum`
 
 **Compact storage for Rust enums with variants of different sizes.**
@@ -186,3 +178,5 @@ It may be less beneficial when variants are already similar in size, when the co
 ## License
 
 This project is licensed under the MIT License.
+
+Inspired by the goose programming language variable size enum 05_shapes.goose

@@ -2,6 +2,7 @@
 name = "example"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [dependencies]
-variable_size_enum = { path = ".." }
+variable_size_enum = { path = "..", version = "0.1.0" }

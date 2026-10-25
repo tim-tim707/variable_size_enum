@@ -588,6 +588,7 @@ fn generate_enum_implementation(
 /// let ping = Ping::new();
 /// let data = Data::new(42, 123);
 /// ```
+/// [`VariableSizeEnum`]: crate::VariableSizeEnum
 #[proc_macro_attribute]
 pub fn variable_size_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as VariableSizeEnumArgs);

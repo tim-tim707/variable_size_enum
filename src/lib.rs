@@ -16,6 +16,44 @@ pub trait VariableSizeEnum: Sized {
     fn from_bytes(bytes: &[u8]) -> (Self, usize);
 }
 
+/// A compact collection for storing values of a [`VariableSizeEnum`] type.
+///
+/// `CompactVec<T>` stores each value using only the bytes required by its active
+/// enum variant, rather than reserving space for the largest possible variant
+/// for every element. This can reduce memory usage when storing large numbers
+/// of enums with variants of different sizes.
+///
+/// # Requirements
+///
+/// The `#[variable_size_enum(kind = ...)]` attribute macro is **mandatory** for
+/// enums used with `CompactVec`. Apply it to the enum declaration to generate
+/// the variant representations and the [`VariableSizeEnum`] implementation
+/// required by this collection.
+///
+/// For example:
+///
+/// ```rust
+/// use variable_size_enum::{variable_size_enum, CompactVec};
+///
+/// #[variable_size_enum(kind = u32)]
+/// #[derive(Debug, Copy, Clone)]
+/// enum Shape {
+///     Circle { radius: f32 },
+///     Rectangle { width: f32, height: f32 },
+///     Point,
+/// }
+///
+/// let mut shapes = CompactVec::<Shape>::new();
+/// shapes.push(Shape::Circle { radius: 2.0 });
+/// shapes.push(Shape::Point);
+/// ```
+///
+/// # Type parameter
+///
+/// - `T`: The enum type annotated with `#[variable_size_enum(kind = ...)]`
+///   and implementing [`VariableSizeEnum`].
+///
+/// [`VariableSizeEnum`]: crate::VariableSizeEnum
 pub struct CompactVec<T> {
     variable_size_enum: std::marker::PhantomData<T>,
     storage: Vec<u8>,

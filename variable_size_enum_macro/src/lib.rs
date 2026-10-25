@@ -384,16 +384,16 @@ fn generate_enum_implementation(
 
         quote! {
             kind if kind == #struct_name::KIND as #kind_repr => {
-                if bytes.len() != ::core::mem::size_of::<#struct_name>() {
-                    panic!("invalid byte length for enum variant");
+                if bytes.len() < ::core::mem::size_of::<#struct_name>() {
+                    panic!("Not enough bytes for enum variant");
                 }
 
                 let value =
                     ::variable_size_enum::bytemuck::pod_read_unaligned::<#struct_name>(
-                        bytes
+                        &bytes[..::core::mem::size_of::<#struct_name>()]
                     );
 
-                value.into()
+                (value.into(), ::core::mem::size_of::<#struct_name>())
             }
         }
     });
@@ -451,14 +451,23 @@ fn generate_enum_implementation(
         quote! {
             #enum_pattern => {
                 let value = #struct_name::new(#constructor_args);
-                let value_bytes =
-                    ::variable_size_enum::bytemuck::bytes_of(&value);
+                let written = ::core::mem::size_of::<#struct_name>();
 
-                assert!(out_bytes.len() >= value_bytes.len(),
-                    "output buffer too small");
+                if out.len() < written {
+                    panic!("output buffer too small");
+                }
 
-                out_bytes[..value_bytes.len()].copy_from_slice(value_bytes);
-                value_bytes.len()
+                // write_unaligned instead of bytemuck::bytes_of + copy_from_slice
+                // Could also build the struct in-place ?
+                //   Check that the compiler doesn't already optimize this since struct is repr(C) + pod
+                unsafe {
+                    out.as_mut_ptr()
+                        .cast::<u8>()
+                        .cast::<#struct_name>()
+                        .write_unaligned(value);
+                }
+
+                written
             }
         }
     });
@@ -479,13 +488,13 @@ fn generate_enum_implementation(
                 }
             }
 
-            fn to_bytes(&self, out_bytes: &mut [u8]) -> usize {
+            fn write_to_uninit(&self, out: &mut [::core::mem::MaybeUninit<u8>]) -> usize {
                 match self {
                     #(#to_bytes_arms,)*
                 }
             }
 
-            fn from_bytes(bytes: &[u8]) -> Self {
+            fn from_bytes(bytes: &[u8]) -> (Self, usize) {
                 let kind_size = ::core::mem::size_of::<#kind_repr>();
 
                 if bytes.len() < kind_size {

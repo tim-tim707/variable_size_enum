@@ -10,7 +10,7 @@ use syn::{
     token::Comma,
 };
 
-// Parse boolean flags: #[variable_enum(kind, struct_with_kind, module = "...", plain_struct)]
+// Parse boolean flags: #[variable_size_enum(kind, struct_with_kind, module = "...", plain_struct)]
 struct VariableSizeEnumArgs {
     kind: syn::Ident, // type given by the user to store the kind
     module_prefix: Option<syn::Path>,
@@ -78,6 +78,41 @@ impl Parse for VariableSizeEnumArgs {
             module_prefix,
         })
     }
+}
+
+fn validate_variant_count(
+    kind: &Ident,
+    variants_len: usize,
+    enum_name: &Ident,
+) -> Result<(), TokenStream> {
+    let max_variants = match kind.to_string().as_str() {
+        "u8" => u8::MAX.into(),
+        "u16" => u16::MAX.into(),
+        "u32" => u32::MAX.into(),
+        "u64" => u64::MAX,
+        _ => {
+            return Err(syn::Error::new_spanned(kind, "Unsupported kind type")
+                .to_compile_error()
+                .into());
+        }
+    };
+
+    if variants_len as u64 > max_variants {
+        return Err(syn::Error::new_spanned(
+            enum_name,
+            format!(
+                "enum `{}` has {} variants, but `{}` can represent only {} distinct discriminants",
+                enum_name,
+                variants_len,
+                quote::quote!(#kind),
+                max_variants,
+            ),
+        )
+        .to_compile_error()
+        .into());
+    }
+
+    Ok(())
 }
 
 fn generate_kind_enum(
@@ -509,12 +544,60 @@ fn generate_enum_implementation(
     }
 }
 
+/// Generates compact, byte-serializable representations for each variant of an enum.
+///
+/// The macro creates a `#[repr(C)] #[bytemuck::Pod] #[bytemuck::Zeroable]` struct
+/// for each enum variant. Each generated struct contains a discriminant field (`kind`)
+/// and the fields belonging to that variant.
+///
+/// This is useful when storing many enum values whose variants have different
+/// sizes: each value can be represented using only the bytes needed for its
+/// active variant, rather than reserving space for the largest variant.
+///
+/// # Arguments
+///
+/// - `kind`: The integer type used to represent the variant discriminant, such
+///   as `u8`, `u16`, or `u64`.
+/// - `module` (optional): A module path in which to place the generated
+///   variant structs. If omitted, the structs are generated in the current
+///   scope.
+///
+/// # Generated items
+///
+/// For each enum variant, the macro generates a corresponding struct with the
+/// same name as the variant. The generated structs provide constructors and
+/// conversions used by the serialization implementation.
+///
+/// The macro also implements [`VariableSizeEnum`] for the original enum. This
+/// implementation provides the maximum variant size and methods for encoding
+/// and decoding values.
+///
+/// # Example
+///
+/// ```rust
+/// use variable_size_enum::variable_size_enum;
+///
+/// #[variable_size_enum(kind = u16)] // u16 so that there is no padding for bytemuck::Pod
+/// #[derive(Debug, Copy, Clone, PartialEq)]
+/// enum Message {
+///     Ping,
+///     Data { id: u16, value: u32 },
+/// }
+///
+/// // Each variant has a corresponding generated representation:
+/// let ping = Ping::new();
+/// let data = Data::new(42, 123);
+/// ```
 #[proc_macro_attribute]
-pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn variable_size_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as VariableSizeEnumArgs);
     let input = parse_macro_input!(item as ItemEnum);
-
     let enum_name = &input.ident;
+
+    if let Err(t) = validate_variant_count(&args.kind, input.variants.len(), enum_name) {
+        return t;
+    }
+
     let derives: Vec<_> = input
         .attrs
         .iter()

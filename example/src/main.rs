@@ -1,8 +1,8 @@
 // Inspired by the goose programming language variable size enum 05_shapes.goose
 
-use variable_size_enum::variable_enum;
+use variable_size_enum::variable_size_enum;
 
-#[variable_enum(kind = "u64")]
+#[variable_size_enum(kind = "u64")]
 #[derive(Debug, Copy, Clone)]
 pub enum Shape {
     Circle { r: f64 },
@@ -11,7 +11,7 @@ pub enum Shape {
     Dot,
 }
 
-#[variable_enum(kind = u64, module = "prefix")]
+#[variable_size_enum(kind = u64, module = "prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },

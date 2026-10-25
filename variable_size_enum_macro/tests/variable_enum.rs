@@ -1,6 +1,6 @@
-use variable_size_enum::{CompactVec, VariableSizeEnum, variable_enum};
+use variable_size_enum::{CompactVec, VariableSizeEnum, variable_size_enum};
 
-#[variable_enum(kind = u64)]
+#[variable_size_enum(kind = u64)]
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Shape {
     Circle { r: f64 },
@@ -214,7 +214,7 @@ fn compact_vec_round_trips_each_shape_through_bytes() {
     }
 }
 
-#[variable_enum(kind = u64, module = "prefix")]
+#[variable_size_enum(kind = u64, module = "prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },
@@ -223,7 +223,7 @@ pub enum ShapeWithPrefix {
     Dot,
 }
 
-#[variable_enum(kind = "u64", module = "prefix2")]
+#[variable_size_enum(kind = "u64", module = "prefix2")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefixNoClash {
     Circle { r: f64 },
@@ -285,7 +285,7 @@ fn converts_between_prefix_shape_and_tagged_structs() {
     assert!(matches!(shape, ShapeWithPrefix::Dot));
 }
 
-#[variable_enum(kind = u64, module = "prefix3::prefix")]
+#[variable_size_enum(kind = u64, module = "prefix3::prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPathPrefix {
     Circle { r: f64 },
@@ -323,7 +323,7 @@ fn shape_with_path_prefix_generates_structs_and_kind() {
     assert_eq!(ShapeWithPathPrefixKind::Dot as u8, 3);
 }
 
-#[variable_enum(kind = u8, module = "data_prefix")]
+#[variable_size_enum(kind = u8, module = "data_prefix")]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MyData {
     A { r: u8 },
@@ -379,7 +379,7 @@ fn enum_with_tagged_struct_to_bytes() {
     assert_eq!(d, *new_d);
 }
 
-#[variable_enum(kind = u16)]
+#[variable_size_enum(kind = u16)]
 #[derive(Debug, Copy, Clone)]
 pub enum Many {
     V0,

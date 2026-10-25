@@ -10,13 +10,13 @@ use syn::{
     token::Comma,
 };
 
-// Parse boolean flags: #[variable_enum(kind, struct_with_kind, struct_with_prefix = "...", plain_struct)]
-struct VariableEnumArgs {
+// Parse boolean flags: #[variable_enum(kind, struct_with_kind, module = "...", plain_struct)]
+struct VariableSizeEnumArgs {
     kind: syn::Ident, // type given by the user to store the kind
     module_prefix: Option<syn::Path>,
 }
 
-impl Parse for VariableEnumArgs {
+impl Parse for VariableSizeEnumArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut kind = None;
         let mut module_prefix = None;
@@ -46,7 +46,7 @@ impl Parse for VariableEnumArgs {
                         }
                     }
                 }
-                "struct_with_prefix" => {
+                "module" => {
                     input.parse::<Token![=]>()?;
                     let value: LitStr = input.parse()?;
                     module_prefix = Some(syn::parse_str::<syn::Path>(&value.value())?);
@@ -55,7 +55,7 @@ impl Parse for VariableEnumArgs {
                     return Err(syn::Error::new(
                         flag.span(),
                         format!(
-                            "unknown flag '{}', expected one of 'kind = \"u8 | u16 | u32 | u64\"', 'struct_with_prefix = \"...\"'",
+                            "unknown flag '{}', expected one of 'kind = \"u8 | u16 | u32 | u64\"', 'module = \"...\"'",
                             other
                         ),
                     ));
@@ -73,7 +73,7 @@ impl Parse for VariableEnumArgs {
             ));
         }
 
-        Ok(VariableEnumArgs {
+        Ok(VariableSizeEnumArgs {
             kind: kind.expect("checked"),
             module_prefix,
         })
@@ -121,7 +121,7 @@ fn wrap_in_modules(
 fn generate_struct_declarations(
     variants: &Punctuated<Variant, Comma>,
     derives: &[syn::Attribute],
-    args: &VariableEnumArgs,
+    args: &VariableSizeEnumArgs,
 ) -> proc_macro2::TokenStream {
     let structs = variants.iter().map(|variant| {
         let variant_name = &variant.ident;
@@ -191,7 +191,7 @@ fn generate_struct_declarations(
     }
 }
 
-fn get_struct_name(args: &VariableEnumArgs, variant_name: &Ident) -> syn::Path {
+fn get_struct_name(args: &VariableSizeEnumArgs, variant_name: &Ident) -> syn::Path {
     match &args.module_prefix {
         Some(module_prefix) => {
             let mut path = module_prefix.clone();
@@ -207,7 +207,7 @@ fn generate_struct_implementations(
     variants: &Punctuated<Variant, Comma>,
     kind_name: &Ident,
     enum_name: &Ident,
-    args: &VariableEnumArgs,
+    args: &VariableSizeEnumArgs,
 ) -> proc_macro2::TokenStream {
     let kind_repr = &args.kind;
 
@@ -323,7 +323,7 @@ fn generate_structs(
     kind_name: &Ident,
     enum_name: &Ident,
     derives: &[syn::Attribute],
-    args: &VariableEnumArgs,
+    args: &VariableSizeEnumArgs,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let declarations = generate_struct_declarations(variants, derives, args);
     let implementations = generate_struct_implementations(variants, kind_name, enum_name, args);
@@ -334,7 +334,7 @@ fn generate_structs(
 fn generate_enum_implementation(
     variants: &Punctuated<Variant, Comma>,
     enum_name: &Ident,
-    args: &VariableEnumArgs,
+    args: &VariableSizeEnumArgs,
 ) -> proc_macro2::TokenStream {
     let kind_repr = &args.kind;
 
@@ -469,7 +469,7 @@ fn generate_enum_implementation(
     });
 
     quote! {
-        impl ::variable_size_enum::VariableEnum for #enum_name {
+        impl ::variable_size_enum::VariableSizeEnum for #enum_name {
             type Kind = #kind_repr;
 
             const MAX_SIZE: usize = {
@@ -511,7 +511,7 @@ fn generate_enum_implementation(
 
 #[proc_macro_attribute]
 pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as VariableEnumArgs);
+    let args = parse_macro_input!(args as VariableSizeEnumArgs);
     let input = parse_macro_input!(item as ItemEnum);
 
     let enum_name = &input.ident;
@@ -528,7 +528,7 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     let (struct_declarations, struct_implementations) =
         generate_structs(&input.variants, &kind_name, enum_name, &derives, &args);
 
-    let enum_implementation = generate_enum_implementation(&input.variants, &enum_name, &args);
+    let enum_implementation = generate_enum_implementation(&input.variants, enum_name, &args);
 
     let expanded = quote! {
         #input

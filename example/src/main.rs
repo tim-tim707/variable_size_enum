@@ -11,7 +11,7 @@ pub enum Shape {
     Dot,
 }
 
-#[variable_enum(kind = u64, struct_with_prefix = "prefix")]
+#[variable_enum(kind = u64, module = "prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },

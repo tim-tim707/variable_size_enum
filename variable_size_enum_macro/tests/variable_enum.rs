@@ -1,4 +1,4 @@
-use variable_size_enum::{VariableEnum, VariableVec, variable_enum};
+use variable_size_enum::{CompactVec, VariableSizeEnum, variable_enum};
 
 #[variable_enum(kind = u64)]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -87,8 +87,8 @@ fn conversion_rejects_wrong_variant() {
 }
 
 #[test]
-fn variable_vec_iter_returns_all_variants_in_order() {
-    let mut shapes = VariableVec::<Shape>::new();
+fn compact_vec_iter_returns_all_variants_in_order() {
+    let mut shapes = CompactVec::<Shape>::new();
     assert!(shapes.is_empty());
 
     let expected = [
@@ -114,8 +114,8 @@ fn variable_vec_iter_returns_all_variants_in_order() {
 }
 
 #[test]
-fn variable_vec_iter_handles_empty_vector() {
-    let shapes = VariableVec::<Shape>::new();
+fn compact_vec_iter_handles_empty_vector() {
+    let shapes = CompactVec::<Shape>::new();
     assert!(shapes.is_empty());
 
     assert_eq!(shapes.iter().count(), 0);
@@ -123,8 +123,8 @@ fn variable_vec_iter_handles_empty_vector() {
 }
 
 #[test]
-fn variable_vec_iter_can_be_reused() {
-    let mut shapes = VariableVec::<Shape>::new();
+fn compact_vec_iter_can_be_reused() {
+    let mut shapes = CompactVec::<Shape>::new();
 
     shapes.push(Shape::Circle { r: 1.0 });
     shapes.push(Shape::Dot);
@@ -135,8 +135,8 @@ fn variable_vec_iter_can_be_reused() {
 }
 
 #[test]
-fn variable_vec_iter_handles_mixed_size_variants() {
-    let mut shapes = VariableVec::<Shape>::new();
+fn compact_vec_iter_handles_mixed_size_variants() {
+    let mut shapes = CompactVec::<Shape>::new();
 
     shapes.push(Shape::Dot);
     shapes.push(Shape::Tri {
@@ -168,8 +168,8 @@ fn variable_vec_iter_handles_mixed_size_variants() {
 }
 
 #[test]
-fn variable_vec_iter_does_not_consume_the_vector() {
-    let mut shapes = VariableVec::<Shape>::new();
+fn compact_vec_iter_does_not_consume_the_vector() {
+    let mut shapes = CompactVec::<Shape>::new();
 
     shapes.push(Shape::Circle { r: 7.0 });
     shapes.push(Shape::Rect { w: 8.0, h: 9.0 });
@@ -184,7 +184,7 @@ fn variable_vec_iter_does_not_consume_the_vector() {
 }
 
 #[test]
-fn variable_vec_round_trips_each_shape_through_bytes() {
+fn compact_vec_round_trips_each_shape_through_bytes() {
     let expected = [
         Shape::Circle { r: 2.5 },
         Shape::Rect { w: 3.0, h: 4.0 },
@@ -214,7 +214,7 @@ fn variable_vec_round_trips_each_shape_through_bytes() {
     }
 }
 
-#[variable_enum(kind = u64, struct_with_prefix = "prefix")]
+#[variable_enum(kind = u64, module = "prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },
@@ -223,7 +223,7 @@ pub enum ShapeWithPrefix {
     Dot,
 }
 
-#[variable_enum(kind = "u64", struct_with_prefix = "prefix2")]
+#[variable_enum(kind = "u64", module = "prefix2")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefixNoClash {
     Circle { r: f64 },
@@ -285,7 +285,7 @@ fn converts_between_prefix_shape_and_tagged_structs() {
     assert!(matches!(shape, ShapeWithPrefix::Dot));
 }
 
-#[variable_enum(kind = u64, struct_with_prefix = "prefix3::prefix")]
+#[variable_enum(kind = u64, module = "prefix3::prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPathPrefix {
     Circle { r: f64 },
@@ -323,7 +323,7 @@ fn shape_with_path_prefix_generates_structs_and_kind() {
     assert_eq!(ShapeWithPathPrefixKind::Dot as u8, 3);
 }
 
-#[variable_enum(kind = u8, struct_with_prefix = "data_prefix")]
+#[variable_enum(kind = u8, module = "data_prefix")]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MyData {
     A { r: u8 },

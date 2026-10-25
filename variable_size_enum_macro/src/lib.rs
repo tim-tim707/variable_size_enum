@@ -191,24 +191,29 @@ fn generate_struct_declarations(
     }
 }
 
+fn get_struct_name(args: &VariableEnumArgs, variant_name: &Ident) -> syn::Path {
+    match &args.module_prefix {
+        Some(module_prefix) => {
+            let mut path = module_prefix.clone();
+            path.segments
+                .push(syn::PathSegment::from(variant_name.clone()));
+            path
+        }
+        None => syn::parse_quote!(#variant_name),
+    }
+}
+
 fn generate_struct_implementations(
     variants: &Punctuated<Variant, Comma>,
     kind_name: &Ident,
     enum_name: &Ident,
     args: &VariableEnumArgs,
 ) -> proc_macro2::TokenStream {
+    let kind_repr = &args.kind;
+
     let implementations = variants.iter().map(|variant| {
         let variant_name = &variant.ident;
-        let kind_repr = &args.kind;
-        let struct_name: syn::Path = match &args.module_prefix {
-            Some(module_prefix) => {
-                let mut path = module_prefix.clone();
-                path.segments
-                    .push(syn::PathSegment::from(variant_name.clone()));
-                path
-            }
-            None => syn::parse_quote!(#variant_name),
-        };
+        let struct_name: syn::Path = get_struct_name(args, variant_name);
 
         let (constructor_parameters, field_initializers, enum_pattern, enum_constructor) =
             match &variant.fields {
@@ -326,6 +331,181 @@ fn generate_structs(
     (declarations, implementations)
 }
 
+fn generate_enum_implementation(
+    variants: &Punctuated<Variant, Comma>,
+    enum_name: &Ident,
+    args: &VariableEnumArgs,
+) -> proc_macro2::TokenStream {
+    let kind_repr = &args.kind;
+
+    let max_size_checks = variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let struct_name = get_struct_name(args, variant_name);
+
+        quote! {
+            if ::core::mem::size_of::<#struct_name>() > max {
+                max = ::core::mem::size_of::<#struct_name>();
+            }
+        }
+    });
+
+    let kind_arms = variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+
+        let enum_pattern = match &variant.fields {
+            Fields::Named(_) => {
+                quote! {
+                    Self::#variant_name { .. }
+                }
+            }
+            Fields::Unnamed(_) => {
+                quote! {
+                    Self::#variant_name(..)
+                }
+            }
+            Fields::Unit => {
+                quote! {
+                    Self::#variant_name
+                }
+            }
+        };
+
+        let struct_name: syn::Path = get_struct_name(args, variant_name);
+
+        quote! {
+            #enum_pattern => #struct_name::KIND as Self::Kind,
+        }
+    });
+
+    let from_bytes_arms = variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+
+        let struct_name: syn::Path = get_struct_name(args, variant_name);
+
+        quote! {
+            kind if kind == #struct_name::KIND as #kind_repr => {
+                if bytes.len() != ::core::mem::size_of::<#struct_name>() {
+                    panic!("invalid byte length for enum variant");
+                }
+
+                let value =
+                    ::variable_size_enum::bytemuck::pod_read_unaligned::<#struct_name>(
+                        bytes
+                    );
+
+                value.into()
+            }
+        }
+    });
+
+    let to_bytes_arms = variants.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let struct_name = get_struct_name(args, variant_name);
+
+        let enum_pattern = match &variant.fields {
+            Fields::Named(fields) => {
+                let names: Vec<_> = fields
+                    .named
+                    .iter()
+                    .map(|field| field.ident.as_ref().unwrap())
+                    .collect();
+
+                quote! {
+                    Self::#variant_name { #(#names),* }
+                }
+            }
+            Fields::Unnamed(fields) => {
+                let names: Vec<_> = (0..fields.unnamed.len())
+                    .map(|i| format_ident!("field_{}", i))
+                    .collect();
+
+                quote! {
+                    Self::#variant_name(#(#names),*)
+                }
+            }
+            Fields::Unit => quote! {
+                Self::#variant_name
+            },
+        };
+
+        let constructor_args = match &variant.fields {
+            Fields::Named(fields) => {
+                let names: Vec<_> = fields
+                    .named
+                    .iter()
+                    .map(|field| field.ident.as_ref().unwrap())
+                    .collect();
+
+                quote! { #(*#names),* }
+            }
+            Fields::Unnamed(fields) => {
+                let names: Vec<_> = (0..fields.unnamed.len())
+                    .map(|i| format_ident!("field_{}", i))
+                    .collect();
+
+                quote! { #(*#names),* }
+            }
+            Fields::Unit => quote! {},
+        };
+
+        quote! {
+            #enum_pattern => {
+                let value = #struct_name::new(#constructor_args);
+                let value_bytes =
+                    ::variable_size_enum::bytemuck::bytes_of(&value);
+
+                assert!(out_bytes.len() >= value_bytes.len(),
+                    "output buffer too small");
+
+                out_bytes[..value_bytes.len()].copy_from_slice(value_bytes);
+                value_bytes.len()
+            }
+        }
+    });
+
+    quote! {
+        impl ::variable_size_enum::VariableEnum for #enum_name {
+            type Kind = #kind_repr;
+
+            const MAX_SIZE: usize = {
+                let mut max = 0usize;
+                #(#max_size_checks)*
+                max
+            };
+
+            fn kind(&self) -> Self::Kind {
+                match self {
+                    #(#kind_arms)*
+                }
+            }
+
+            fn to_bytes(&self, out_bytes: &mut [u8]) -> usize {
+                match self {
+                    #(#to_bytes_arms,)*
+                }
+            }
+
+            fn from_bytes(bytes: &[u8]) -> Self {
+                let kind_size = ::core::mem::size_of::<#kind_repr>();
+
+                if bytes.len() < kind_size {
+                    panic!("bytes too short to contain enum kind");
+                }
+
+                let kind =
+                    ::variable_size_enum::bytemuck::pod_read_unaligned::<#kind_repr>(
+                        &bytes[..kind_size]
+                    );
+
+                match kind {
+                    #(#from_bytes_arms,)*
+                    _ => panic!("invalid enum kind"),
+                }
+            }
+        }
+    }
+}
+
 #[proc_macro_attribute]
 pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as VariableEnumArgs);
@@ -341,10 +521,11 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let kind_name = format_ident!("{}Kind", enum_name);
 
+    let kind_enum = generate_kind_enum(&input.variants, &kind_name, &args.kind, &input.vis);
     let (struct_declarations, struct_implementations) =
         generate_structs(&input.variants, &kind_name, enum_name, &derives, &args);
 
-    let kind_enum = generate_kind_enum(&input.variants, &kind_name, &args.kind, &input.vis);
+    let enum_implementation = generate_enum_implementation(&input.variants, &enum_name, &args);
 
     let expanded = quote! {
         #input
@@ -353,6 +534,8 @@ pub fn variable_enum(args: TokenStream, item: TokenStream) -> TokenStream {
 
         #struct_declarations
         #struct_implementations
+
+        #enum_implementation
     };
 
     expanded.into()

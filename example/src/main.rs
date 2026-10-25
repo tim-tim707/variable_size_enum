@@ -2,7 +2,7 @@
 
 use variable_size_enum::variable_enum;
 
-#[variable_enum(kind = "u64", struct_with_kind)]
+#[variable_enum(kind = "u64")]
 #[derive(Debug, Copy, Clone)]
 pub enum Shape {
     Circle { r: f64 },
@@ -11,7 +11,7 @@ pub enum Shape {
     Dot,
 }
 
-#[variable_enum(kind = u64, struct_with_kind, struct_with_prefix = "prefix")]
+#[variable_enum(kind = u64, struct_with_prefix = "prefix")]
 #[derive(Debug, Copy, Clone)]
 pub enum ShapeWithPrefix {
     Circle { r: f64 },
